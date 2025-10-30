@@ -1,0 +1,321 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Media xmlns="http://www.scte.org/schemas/224"
+       xmlns:xlink="http://www.w3.org/1999/xlink"
+       xmlns:action="http://qplive.com/schemas/224/action"
+       id="urn:scte:224:media:base-channel"
+       description="Gray WANT Daily Schedule"
+       lastUpdated="2025-10-23T00:00:00Z"
+       effective="2025-10-23T00:00:00Z"
+       expires="2025-10-24T00:00:00Z"> 
+    <!-- 00:00 hrs to 09:00 hrs base stream -->
+    <MediaPoint id="urn:scte:224:mp:base-stream"
+                description="Play Base Stream"
+                effective="2025-10-23T00:00:00Z"
+                expires="2025-10-23T09:00:00Z"
+                matchTime="2025-10-23T00:00:00Z"
+                expectedDuration="PT9H"
+                reusable="true">
+        
+        <AltID type="private:qplive">BaseStreamSwitch</AltID>
+        
+        <Apply duration="PT9H" priority="50">
+            <Policy id="urn:scte:224:policy:base-stream">
+                <ViewingPolicy id="urn:scte:224:vp:base-stream">
+                    <Audience id="urn:scte:224:audience:us"/>
+                    <action:Content>
+                        <action:SourceURI>stream://base-stream</action:SourceURI>
+                        <action:AlternateURI>stream://base-stream</action:AlternateURI>
+                        <action:FallbackURI>stream://base-stream</action:FallbackURI>
+                    </action:Content>
+                </ViewingPolicy>
+            </Policy>
+        </Apply>
+    </MediaPoint>
+    <!-- 09:00 hrs to 10:00 hrs LC1 -->
+    <MediaPoint id="urn:scte:224:mp:wanf-pri-fast-stream"
+                description="Play wanf-ATLTV-XOS2-Input-2-Stream"
+                effective="2025-10-23T09:00:00Z"             
+                matchTime="2025-10-23T09:00:00Z"
+                expectedDuration="PT1H"
+                reusable="true">
+
+        <!-- Match SCTE-35 with specific eventId and start cmd -->
+        <MatchSignal match="ALL" schema="http://www.scte.org/schemas/35">
+            <Assert>/SpliceInfoSection/SegmentationDescriptor[@spliceEventId='0x1234']</Assert>
+            <Assert>/SpliceInfoSection/SegmentationDescriptor[@segmentationTypeId='0x11']</Assert>
+        </MatchSignal>
+
+        <Apply priority="60">
+            <Policy id="urn:scte:224:policy:wanf-pri-fast-stream-switch">
+                <ViewingPolicy id="urn:scte:224:vp:wanf-pri-fast-stream-switch">
+                    <action:Content>
+                        <action:SourceURI>stream://base-stream</action:SourceURI>
+                        <action:AlternateURI>stream://wanf-ATLTV-XOS2-Input-2</action:AlternateURI>
+                        <action:FallbackURI>stream://base-stream</action:FallbackURI>
+                    </action:Content>
+                </ViewingPolicy>
+            </Policy>
+        </Apply>
+    </MediaPoint>
+    <!-- close LC1 at 10 when end marker comes-->
+    <MediaPoint id="urn:scte:224:mp:wanf-pri-fast-stream-close"
+                description="Play wanf-ATLTV-XOS2-Input-2-Stream closing"
+                effective="2025-10-23T09:00:00Z"
+                expires="2025-10-23T10:30:00Z"
+                matchTime="2025-10-23T10:00:00Z"
+                reusable="true">
+        <!-- Match SCTE-35 with specific eventId and end cmd -->
+        <MatchSignal match="ANY" schema="http://www.scte.org/schemas/35">
+            <Assert>/SpliceInfoSection/SegmentationDescriptor[@segmentationTypeId='0x10' and @segmentationEventId='0x1234']</Assert>
+        </MatchSignal>
+
+        <!-- End condition: LC1 wanf-pri-fast-stream end -->
+        <Remove>
+            <Policy xlink:href="urn:scte:224:policy:wanf-pri-fast-stream-switch"/>
+        </Remove>
+    </MediaPoint>
+    <!-- 10:00 hrs to 11:00 hrs continue LC1 in next program time based boundary-->
+    <MediaPoint id="urn:scte:224:mp:wanf-pri-fast-stream-program2"
+                description="Play wanf-ATLTV-XOS2-Input-2-Stream program 2"
+                effective="2025-10-23T10:00:00Z"
+                expires="2025-10-23T11:00:00Z"
+                matchTime="2025-10-23T10:00:00Z"
+                expectedDuration="PT1H"
+                reusable="true">
+
+    
+        <Apply priority="60">
+            <Policy id="urn:scte:224:policy:wanf-pri-fast-stream-switch-p2">
+                <ViewingPolicy id="urn:scte:224:vp:wanf-pri-fast-stream-switch-p2">
+                    <action:Content>
+                        <action:SourceURI>stream://base-stream</action:SourceURI>
+                        <action:AlternateURI>stream://wanf-ATLTV-XOS2-Input-2</action:AlternateURI>
+                        <action:FallbackURI>stream://base-stream</action:FallbackURI>
+                    </action:Content>
+                </ViewingPolicy>
+            </Policy>
+        </Apply>
+    </MediaPoint>
+    <!-- 11:00 hrs to 12:00 hrs replay LC1 in VOD mode time based boundary-->
+    <MediaPoint id="urn:scte:224:mp:vod:program1"
+                description="Play wanf-ATLTV-XOS2-Input-2-Stream program 1 in replay mode"
+                effective="2025-10-23T11:00:00Z"
+                expires="2025-10-23T12:00:00Z"
+                matchTime="2025-10-23T11:00:00Z"
+                expectedDuration="PT1H"
+                reusable="true">
+
+    
+        <Apply priority="60">
+            <Policy id="urn:scte:224:policy:wanf-program-1">
+                <ViewingPolicy id="urn:scte:224:vp:wanf-program-1">
+                    <action:Content>
+                        <action:SourceURI>stream://wanf-ATLTV-XOS2-Input-2</action:SourceURI>
+                        <action:AlternateURI>vod://wanf-program1</action:AlternateURI>
+                        <action:FallbackURI>stream://base-stream</action:FallbackURI>
+                    </action:Content>
+                </ViewingPolicy>
+            </Policy>
+        </Apply>
+    </MediaPoint>
+    <!-- 13:00 hrs to 16:00 hrs National Channel LNL-->
+    <MediaPoint id="urn:scte:224:mp:lnl"
+                description="Play LNL"
+                effective="2025-10-23T13:00:00Z"
+                expires="2025-10-23T16:00:00Z"
+                matchTime="2025-10-23T13:00:00Z"
+                expectedDuration="PT3H"
+                reusable="true">
+
+    
+        <Apply priority="60">
+            <Policy id="urn:scte:224:policy:lnl">
+                <ViewingPolicy id="urn:scte:224:vp:lnl">
+                    <action:Content>
+                        <action:SourceURI>stream://wanf-ATLTV-XOS2-Input-2</action:SourceURI>
+                        <action:AlternateURI>stream://lnl-stream</action:AlternateURI>
+                        <action:FallbackURI>stream://base-stream</action:FallbackURI>
+                    </action:Content>
+                </ViewingPolicy>
+            </Policy>
+        </Apply>
+    </MediaPoint>
+    <!-- 16:00 hrs to 17:00 hrs LC2 Stream switch from LNL-->
+    <MediaPoint id="urn:scte:224:mp:wanf-event-stream-LC2"
+                description="Play WANF Local Stream 2 ATLTV-XOS1 Input 2"
+                effective="2025-10-23T16:00:00Z"
+                matchTime="2025-10-23T16:00:00Z"
+                expectedDuration="PT1H"
+                reusable="true">
+
+        <!-- Match SCTE-35 with specific eventId and start cmd -->
+        <MatchSignal match="ALL" schema="http://www.scte.org/schemas/35">
+            <Assert>/SpliceInfoSection/SegmentationDescriptor[@spliceEventId='0x7890']</Assert>
+            <Assert>/SpliceInfoSection/SegmentationDescriptor[@segmentationTypeId='0x11']</Assert>
+        </MatchSignal>
+
+    
+        <Apply priority="60">
+            <Policy id="urn:scte:224:policy:wanf-ATLTV-XOS1-Input-2-switch">
+                <ViewingPolicy id="urn:scte:224:vp:wanf-ATLTV-XOS1-Input-2-switch">
+                    <action:Content>
+                        <action:SourceURI>stream://wanf-ATLTV-XOS2-Input-2</action:SourceURI>
+                        <action:AlternateURI>stream://wanf-ATLTV-XOS1-Input-2</action:AlternateURI>
+                        <action:FallbackURI>stream://base-stream</action:FallbackURI>
+                    </action:Content>
+                </ViewingPolicy>
+            </Policy>
+        </Apply>
+    </MediaPoint>
+    <!-- close LC1 at 10 when end marker comes-->
+    <MediaPoint id="urn:scte:224:mp:wanf-event-stream-close"
+                description="Play wanf-ATLTV-XOS2-Input-2-Stream closing"
+                effective="2025-10-23T16:00:00Z"
+                expires="2025-10-23T17:30:00Z"
+                reusable="true">
+        <!-- Match SCTE-35 with specific eventId and end cmd -->
+        <MatchSignal match="ANY" schema="http://www.scte.org/schemas/35">
+            <Assert>/SpliceInfoSection/SegmentationDescriptor[@segmentationTypeId='0x10' and @segmentationEventId='0x7890']</Assert>
+        </MatchSignal>
+
+        <!-- End condition: LC1 wanf-pri-fast-stream end -->
+        <Remove>
+            <Policy xlink:href="urn:scte:224:policy:wanf-ATLTV-XOS1-Input-2-switch"/>
+        </Remove>
+    </MediaPoint>
+    <!-- 17:00 hrs to 18:00 hrs National Channel ITV-->
+    <MediaPoint id="urn:scte:224:mp:itv"
+                description="Play Investigation TV"
+                effective="2025-10-23T17:00:00Z"
+                expires="2025-10-23T18:00:00Z"
+                matchTime="2025-10-23T16:00:00Z"
+                expectedDuration="PT1H"
+                reusable="true">
+
+    
+        <Apply priority="90">
+            <Policy id="urn:scte:224:policy:itv">
+                <ViewingPolicy id="urn:scte:224:vp:itv">
+                    <action:Content>
+                        <action:SourceURI>stream://base-stream</action:SourceURI>
+                        <action:AlternateURI>stream://itv-stream</action:AlternateURI>
+                        <action:FallbackURI>stream://base-stream</action:FallbackURI>
+                    </action:Content>
+                </ViewingPolicy>
+            </Policy>
+        </Apply>
+    </MediaPoint>
+    <!-- 18:00 hrs to 24:00 hrs switch between WANF LC1 and LC2 cascade in sequence based on SCTE marker-->
+    <MediaPoint id="urn:scte:224:mp:wanf-event-stream-LC1"
+                description="Play WANF ATLTV-XOS1 Input 3"
+                effective="2025-10-23T18:00:00Z"
+                reusable="true">
+        <!-- start the program with SCTE start -->
+        
+        <!-- Match SCTE-35 with specific eventId and start cmd -->
+        <MatchSignal match="ALL" schema="http://www.scte.org/schemas/35">
+            <Assert>/SpliceInfoSection/SegmentationDescriptor[@spliceEventId='0x7890']</Assert>
+            <Assert>/SpliceInfoSection/SegmentationDescriptor[@segmentationTypeId='0x11']</Assert>
+        </MatchSignal>
+        
+        <!-- Switch to ATLTV-XOS1-Input-3 -->
+        <Apply priority="60">
+            <Policy id="urn:scte:224:policy:wanf-ATLTV-XOS1-Input-3-switch">
+                <ViewingPolicy id="urn:scte:224:vp:wanf-ATLTV-XOS1-Input-3-switch">
+                    <action:Content>
+                        <action:SourceURI>stream://wanf-ATLTV-XOS2-Input-2</action:SourceURI>
+                        <action:AlternateURI>stream://wanf-ATLTV-XOS1-Input-3</action:AlternateURI>
+                        <action:FallbackURI>stream://base-stream</action:FallbackURI>
+                    </action:Content>
+                </ViewingPolicy>
+            </Policy>
+        </Apply>
+                
+    </MediaPoint>                
+    <MediaPoint id="urn:scte:224:mp:wanf-event-stream-LC1-end"
+                description="Play WANF ATLTV-XOS1 Input 3-end"
+                effective="2025-10-23T18:00:00Z"
+                reusable="true">
+
+        <!-- Match SCTE-35 with specific eventId and end cmd -->
+        <MatchSignal match="ALL" schema="http://www.scte.org/schemas/35">
+            <Assert>/SpliceInfoSection/SegmentationDescriptor[@spliceEventId='0x7890']</Assert>
+            <Assert>/SpliceInfoSection/SegmentationDescriptor[@segmentationTypeId='0x10']</Assert>
+        </MatchSignal>
+
+        <Remove>
+            <Policy xlink:href="urn:scte:224:policy:wanf-ATLTV-XOS1-Input-3-switch"/>
+        </Remove>
+    </MediaPoint>
+    <!-- Second program in sequence (starts after first ends) -->
+    <MediaPoint id="urn:scte:224:mp:wanf-ATLTV-XOS1-Input-1"
+                description="In sequence wanf-ATLTV-XOS1-Input-1"
+                effective="2025-09-15T18:30:00Z"
+                expectedDuration="PT30M">
+        
+        <Apply duration="PT30M" priority="30">
+            <Policy id="urn:scte:224:policy:wanf-ATLTV-XOS1-Input-1-switch">
+                <ViewingPolicy id="urn:scte:224:vp:wanf-ATLTV-XOS1-Input-1-switch">
+                    <action:Content>
+                        <action:AlternateURI>stream://wanf-ATLTV-XOS1-Input-1</action:AlternateURI>
+                    </action:Content>
+                </ViewingPolicy>
+            </Policy>
+        </Apply>
+    </MediaPoint>
+    <!-- end it-->
+    <MediaPoint id="urn:scte:224:mp:wanf-event-wanf-ATLTV-XOS1-Input-1-end"
+                description="Play WANF ATLTV-XOS1-Input-1-end"
+                effective="2025-10-23T18:00:00Z"
+                reusable="true">
+
+        <!-- Match SCTE-35 with specific eventId and end cmd -->
+        <MatchSignal match="ALL" schema="http://www.scte.org/schemas/35">
+            <Assert>/SpliceInfoSection/SegmentationDescriptor[@spliceEventId='0x7890']</Assert>
+            <Assert>/SpliceInfoSection/SegmentationDescriptor[@segmentationTypeId='0x10']</Assert>
+        </MatchSignal>
+
+        <Remove>
+            <Policy xlink:href="urn:scte:224:policy:wanf-ATLTV-XOS1-Input-1-switch"/>
+        </Remove>
+    </MediaPoint>
+    <!-- local override-->
+    <MediaPoint id="urn:scte:224:mp:priority-override"
+                description="High priority local override based on SCTE-35"
+                reusable="true">
+        
+        <AltID type="private:techexlab">PrioritySwitchWithSCTE35</AltID>
+        
+        <!-- Match priority switch signal -->
+        <MatchSignal match="ANY" schema="http://www.scte.org/schemas/35">
+            <Assert>/SpliceInfoSection/SpliceInsert[contains(@privateIndicator, 'PrioritySwitch')]</Assert>
+        </MatchSignal>
+        
+        <Apply priority="100">
+            <Policy id="urn:scte:224:policy:priority-override">
+                <ViewingPolicy id="urn:scte:224:vp:priority-override">
+                    <action:Content>
+                        <action:SourceURI>stream://current-stream</action:SourceURI>
+                        <action:AlternateURI>stream://local-override-stream</action:AlternateURI>
+                        <action:FallbackURI>stream://base-stream</action:FallbackURI>
+                    </action:Content>
+                </ViewingPolicy>
+            </Policy>
+        </Apply>
+    </MediaPoint>
+    <!--switch to schedule-->
+    <MediaPoint id="urn:scte:224:mp:schedule-comeback"
+                description="High priority override based on SCTE-35 to follow schedule"
+                reusable="true">
+        
+        <AltID type="private:techexlab">PrioritySwitchWithSCTE35</AltID>
+        
+        <!-- Match priority switch signal -->
+        <MatchSignal match="ANY" schema="http://www.scte.org/schemas/35">
+            <Assert>/SpliceInfoSection/SpliceInsert[contains(@privateIndicator, 'PrioritySwitch')]</Assert>
+        </MatchSignal>
+        <Remove>
+            <Policy xlink:href="urn:scte:224:policy:priority-override"/>
+        </Remove>
+
+    </MediaPoint>
