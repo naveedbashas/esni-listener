@@ -2,66 +2,71 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"flag"
 	"log"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
-	"github.com/example/scte224service/internal/domain"
+	"go.temporal.io/sdk/client"
+
+	"github.com/example/scte224service/internal/config"
+	"github.com/example/scte224service/internal/httpapi"
 	"github.com/example/scte224service/internal/service"
+	"github.com/example/scte224service/internal/temporal"
 )
 
 func main() {
-	ctx := context.Background()
+	configPath := flag.String("config", "", "path to YAML config")
+	flag.Parse()
 
-	file, err := os.Open("SCTE-224_example.xml")
+	cfg, err := config.Load(*configPath)
 	if err != nil {
-		log.Fatalf("unable to open SCTE-224 example: %v", err)
-	}
-	defer file.Close()
-
-	srv := service.New(service.Config{
-		Output: os.Stdout,
-	})
-	srv.Start()
-	defer srv.Stop()
-
-	media, err := srv.IngestMedia(ctx, file)
-	if err != nil {
-		log.Fatalf("ingest failed: %v", err)
+		log.Fatalf("load config: %v", err)
 	}
 
-	fmt.Printf("Ingested media %s with %d media points\n", media.ID, len(media.MediaPoints))
-
-	// Allow scheduler to trigger immediate past events.
-	time.Sleep(500 * time.Millisecond)
-
-	// Simulate signal for WANF primary FAST stream start (eventId 0x1234).
-	srv.ProcessSignal(&domain.SCTE35Event{
-		EventID:          "0x1234",
-		SegmentationType: "0x11",
-		ArrivedAt:        time.Now().UTC(),
+	temporalClient, err := client.Dial(client.Options{
+		HostPort:  cfg.Temporal.HostPort,
+		Namespace: cfg.Temporal.Namespace,
 	})
+	if err != nil {
+		log.Fatalf("connect to Temporal: %v", err)
+	}
+	defer temporalClient.Close()
 
-	// Simulate signal for WANF primary FAST stream stop (segmentationType 0x10).
-	srv.ProcessSignal(&domain.SCTE35Event{
-		EventID:             "0x1234",
-		SegmentationEventID: "0x1234",
-		SegmentationType:    "0x10",
-		ArrivedAt:           time.Now().UTC().Add(2 * time.Second),
-	})
+	svc := service.New(temporalClient, cfg.Temporal.TaskQueue, cfg.Audiences, os.Stdout)
+	worker := temporal.NewWorker(temporalClient, svc, cfg.Temporal.TaskQueue)
 
-	// Simulate high priority local override.
-	srv.ProcessSignal(&domain.SCTE35Event{
-		PrivateIndicator: "PrioritySwitch",
-		ArrivedAt:        time.Now().UTC().Add(3 * time.Second),
-	})
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	// Give goroutines time to process.
-	time.Sleep(2 * time.Second)
+	workerStop := make(chan struct{})
+	go func() {
+		if err := worker.Run(workerStop); err != nil {
+			log.Printf("temporal worker exited: %v", err)
+		}
+	}()
 
-	for audience, decision := range srv.Snapshot() {
-		fmt.Printf("Audience %s manifest -> alt=%s fallback=%s action=%s priority=%d\n",
-			audience, decision.AlternateURI, decision.FallbackURI, decision.Action, decision.Priority)
+	server := &http.Server{
+		Addr:    cfg.HTTP.Address,
+		Handler: httpapi.New(svc),
+	}
+
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			log.Printf("http shutdown: %v", err)
+		}
+		close(workerStop)
+		worker.Stop()
+	}()
+
+	log.Printf("HTTP listening on %s", cfg.HTTP.Address)
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatalf("server error: %v", err)
 	}
 }

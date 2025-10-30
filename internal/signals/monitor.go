@@ -1,7 +1,7 @@
 package signals
 
 import (
-	"log"
+	"context"
 	"strings"
 	"time"
 
@@ -9,24 +9,30 @@ import (
 	"github.com/example/scte224service/internal/storage"
 )
 
+// TriggerHandler is invoked for each media point matched by a signal.
+type TriggerHandler func(mp *domain.MediaPoint, event *domain.SCTE35Event)
+
 // Monitor evaluates incoming SCTE-35 events against stored media point match rules.
 type Monitor struct {
-	store     *storage.ScheduleStore
-	triggerCh chan<- *domain.Trigger
+	store   *storage.ScheduleStore
+	handler TriggerHandler
 }
 
 // NewMonitor creates a signal monitor.
-func NewMonitor(store *storage.ScheduleStore, triggerCh chan<- *domain.Trigger) *Monitor {
-	return &Monitor{store: store, triggerCh: triggerCh}
+func NewMonitor(store *storage.ScheduleStore, handler TriggerHandler) *Monitor {
+	return &Monitor{store: store, handler: handler}
 }
 
-// Process ingests an SCTE-35 event and emits triggers for matching media points.
-func (m *Monitor) Process(event *domain.SCTE35Event) {
+// Process ingests an SCTE-35 event and invokes the handler for each match.
+func (m *Monitor) Process(ctx context.Context, event *domain.SCTE35Event) {
 	if event == nil {
 		return
 	}
 	if event.ArrivedAt.IsZero() {
 		event.ArrivedAt = time.Now().UTC()
+	}
+	if m.handler == nil {
+		return
 	}
 	mediaPoints := m.store.MediaPoints()
 	for _, mp := range mediaPoints {
@@ -34,17 +40,12 @@ func (m *Monitor) Process(event *domain.SCTE35Event) {
 			continue
 		}
 		if matchesMediaPoint(mp, event) {
-			trigger := &domain.Trigger{
-				MediaPoint: mp,
-				Signal:     event,
-				Type:       domain.TriggerSignal,
-				OccurredAt: event.ArrivedAt,
-			}
 			select {
-			case m.triggerCh <- trigger:
+			case <-ctx.Done():
+				return
 			default:
-				log.Printf("signal monitor: trigger channel full, dropping signal event for %s", mp.ID)
 			}
+			m.handler(mp, event)
 		}
 	}
 }
