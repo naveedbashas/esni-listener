@@ -114,6 +114,8 @@ const (
 	TriggerTime TriggerType = "time"
 	// TriggerSignal indicates an in-band signaling activation.
 	TriggerSignal TriggerType = "signal"
+	// TriggerExpiration indicates an automatic expiration of a media point or apply duration.
+	TriggerExpiration TriggerType = "expiration"
 )
 
 // SCTE35Event is a simplified representation of an in-band signal.

@@ -67,11 +67,18 @@ func (s *Service) IngestMedia(ctx context.Context, reader io.Reader) (*domain.Me
 	for _, mp := range media.MediaPoints {
 		workflowID := buildWorkflowID(mp.ID)
 		input := workflows.MediaPointWorkflowInput{
-			MediaPointID: mp.ID,
-			MatchTime:    mp.MatchTime,
-			Reusable:     mp.Reusable,
-			HasApply:     len(mp.ApplyActions) > 0,
-			HasRemove:    len(mp.RemoveActions) > 0,
+			MediaPointID:     mp.ID,
+			MatchTime:        mp.MatchTime,
+			Reusable:         mp.Reusable,
+			HasApply:         len(mp.ApplyActions) > 0,
+			HasRemove:        len(mp.RemoveActions) > 0,
+			ExpectedDuration: mp.ExpectedDuration,
+		}
+		for _, action := range mp.ApplyActions {
+			if action == nil || action.Duration <= 0 {
+				continue
+			}
+			input.ApplyDurations = append(input.ApplyDurations, action.Duration)
 		}
 		options := client.StartWorkflowOptions{
 			ID:                       workflowID,
@@ -99,7 +106,15 @@ func (s *Service) ProcessSignal(ctx context.Context, event *domain.SCTE35Event) 
 }
 
 // ProcessMediaPoint applies or removes policies for the given media point via the decision engine.
+
 func (s *Service) ProcessMediaPoint(ctx context.Context, input workflows.ProcessActivityInput) error {
+	if input.TriggerType == domain.TriggerExpiration {
+		decisions := s.engine.RemoveByMediaPoint(input.MediaPointID, s.audiences)
+		for _, decision := range decisions {
+			s.manipulator.ApplyDecision(decision)
+		}
+		return nil
+	}
 	mediaPoint, ok := s.store.MediaPointByID(input.MediaPointID)
 	if !ok {
 		return fmt.Errorf("media point %s not found", input.MediaPointID)

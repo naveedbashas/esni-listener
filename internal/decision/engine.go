@@ -42,6 +42,47 @@ func (e *Engine) Decide(trigger *domain.Trigger, audiences []string) []*domain.D
 	return decisions
 }
 
+// RemoveByMediaPoint removes all active policies that originated from the given media point.
+func (e *Engine) RemoveByMediaPoint(mediaPointID string, audiences []string) []*domain.Decision {
+	if mediaPointID == "" {
+		return nil
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	var removals []*domain.Decision
+	now := time.Now().UTC()
+	for _, audience := range audiences {
+		activePolicies := e.active[audience]
+		if len(activePolicies) == 0 {
+			continue
+		}
+		for policyID, decision := range activePolicies {
+			if decision == nil || decision.MediaPointID != mediaPointID {
+				continue
+			}
+			removal := &domain.Decision{
+				MediaPointID:    decision.MediaPointID,
+				PolicyID:        decision.PolicyID,
+				ViewingPolicyID: decision.ViewingPolicyID,
+				AudienceID:      decision.AudienceID,
+				Priority:        decision.Priority,
+				SourceURI:       decision.SourceURI,
+				AlternateURI:    decision.AlternateURI,
+				FallbackURI:     decision.FallbackURI,
+				TriggeredAt:     now,
+				TriggerType:     domain.TriggerExpiration,
+				Action:          domain.DecisionRemove,
+			}
+			removals = append(removals, removal)
+			delete(activePolicies, policyID)
+		}
+		if len(activePolicies) == 0 {
+			delete(e.active, audience)
+		}
+	}
+	return removals
+}
+
 func (e *Engine) evaluateApply(trigger *domain.Trigger, audience string) *domain.Decision {
 	mp := trigger.MediaPoint
 	if len(mp.ApplyActions) == 0 {
